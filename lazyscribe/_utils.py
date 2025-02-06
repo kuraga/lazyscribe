@@ -2,30 +2,16 @@
 
 from collections.abc import Iterator
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, no_type_check
 
 from attrs import asdict, fields, filters
 
 from lazyscribe.artifacts.base import Artifact
 
 
-def serializer(inst, field, value):
-    """Datetime and dependencies converter for :meth:`attrs.asdict`.
-
-    Parameters
-    ----------
-    inst
-        Included for compatibility.
-    field
-        The field name.
-    value
-        The field value.
-
-    Returns
-    -------
-    Any
-        Converted value for easy serialization.
-    """
+@no_type_check
+def serializer(inst, field, value):  # noqa: ANN001, ANN202
+    """Convert datetime and dependencies for :py:meth:`attrs.asdict`."""
     if isinstance(value, datetime):
         return value.isoformat(timespec="seconds")
     if field is not None and field.name == "dependencies":
@@ -42,6 +28,7 @@ def serializer(inst, field, value):
 
 
 def serialize_artifacts(alist: list[Artifact]) -> Iterator[dict[str, Any]]:
+    """Serialize list of artifacts."""
     yield from (
         {
             **asdict(
@@ -68,7 +55,7 @@ def utcnow() -> datetime:
 
     Returns
     -------
-    datetime
+    datetime.datetime
         Now in UTC, without timezone info.
     """
     return datetime.now(timezone.utc).replace(tzinfo=None)

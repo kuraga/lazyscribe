@@ -51,7 +51,7 @@ additional metadata to capture, this is where we would capture it
 .. code-block:: python
 
     from datetime import datetime, timezone
-    from typing import Any, ClassVar, Optional
+    from typing import Any, ClassVar, IO
 
     from attrs import define
 
@@ -74,19 +74,19 @@ additional metadata to capture, this is where we would capture it
             fname: str | None = None,
             created_at: datetime | None = None,
             writer_kwargs: dict | None = None,
-            version: int | None = None,
+            version: int = 0,
             dirty: bool = True,
-            **kwargs
-        ):
+            **kwargs: Any
+        ) -> TextArtifact:
             """Construct the handler class."""
             created_at = created_at or datetime.now(timezone.utc)
             return cls(
                 name=name,
                 value=value,
-                writer_kwargs=writer_kwargs or {},
-                version=version,
                 fname=fname or f"{slugify(name)}-{slugify(created_at.strftime('%Y%m%d%H%M%S'))}.{cls.suffix}",
                 created_at=created_at,
+                writer_kwargs=writer_kwargs or {},
+                version=version,
                 dirty=dirty,
             )
 
@@ -99,37 +99,15 @@ methods should expect a file buffer from the ``fsspec`` filesystem.
     @define(auto_attribs=True)
     class TextArtifact(Artifact):
         ...
+
         @classmethod
-        def read(cls, buf, **kwargs):
-            """Read in the artifact.
-
-            Parameters
-            ----------
-            buf : file-like object
-                The buffer from a ``fsspec`` filesystem.
-            **kwargs
-                Keyword arguments for compatibility.
-
-            Returns
-            -------
-            Any
-                The artifact.
-            """
+        def read(cls, buf: IO, **kwargs: Any) -> Any:
+            """Read in the artifact."""
             return buf.read()
 
         @classmethod
-        def write(cls, obj, buf, **kwargs):
-            """Write the content to a Text file.
-
-            Parameters
-            ----------
-            obj : object
-                The Text-serializable object.
-            buf : file-like object
-                The buffer from a ``fsspec`` filesystem.
-            **kwargs
-                Keyword arguments for compatibility.
-            """
+        def write(cls, obj: Any, buf: IO, **kwargs: Any) -> None:
+            """Write the content to a text file."""
             buf.write(obj)
 
 You have a new custom handler!

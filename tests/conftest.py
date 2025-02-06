@@ -1,17 +1,22 @@
+"""Stubs for testing."""
+
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any, ClassVar
+from typing import IO, Any, AnyStr, ClassVar
 
 from slugify import slugify
 
 from lazyscribe._utils import utcnow
-from lazyscribe.artifacts import Artifact
+from lazyscribe.artifacts.base import Artifact
 
 
 class TestArtifact(Artifact):
+    """Stub for test artifacts."""
+
     # Tell pytest it's not a Python test class
     __test__ = False
+
     alias: ClassVar[str] = "testartifact"
     suffix: ClassVar[str] = "testartifact"
     binary: ClassVar[bool] = True
@@ -22,14 +27,15 @@ class TestArtifact(Artifact):
     def construct(
         cls,
         name: str,
-        value: Any | None = None,
+        value: Any = None,
         fname: str | None = None,
         created_at: datetime | None = None,
-        writer_kwargs: dict | None = None,
+        writer_kwargs: dict[str, Any] | None = None,
         version: int | None = None,
         dirty: bool = True,
-        **kwargs,
-    ):
+        **kwargs: Any,
+    ) -> TestArtifact:
+        """Stub for constructing."""
         created_at = created_at or utcnow()
         version = version if version is not None else 0
         return cls(
@@ -41,12 +47,13 @@ class TestArtifact(Artifact):
             created_at=created_at,
             version=version,
             dirty=dirty,
+            **kwargs,
         )
 
     @classmethod
-    def read(cls, buf, **kwargs):
-        pass
+    def read(cls, buf: IO[AnyStr], **kwargs: Any) -> Any:
+        """Stub for reading."""
 
     @classmethod
-    def write(cls, obj, buf, **kwargs):
-        pass
+    def write(cls, obj: Any, buf: IO[AnyStr], **kwargs: Any) -> None:
+        """Stub for writing."""

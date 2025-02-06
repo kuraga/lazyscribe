@@ -14,11 +14,11 @@ def serializer(inst: type, field: Attribute, value: Any) -> Any:
 
     Parameters
     ----------
-    inst
+    inst : type
         Included for compatibility.
-    field
+    field : attrs.Attribute
         The field name.
-    value
+    value : Any
         The field value.
 
     Returns
@@ -42,6 +42,7 @@ def serializer(inst: type, field: Attribute, value: Any) -> Any:
 
 
 def serialize_artifacts(alist: list[Artifact]) -> Iterator[dict[str, Any]]:
+    """Serialize list of artifacts."""
     yield from (
         {
             **asdict(
@@ -68,7 +69,7 @@ def utcnow() -> datetime:
 
     Returns
     -------
-    datetime
+    datetime.datetime
         Now in UTC, without timezone info.
     """
     return datetime.now(timezone.utc).replace(tzinfo=None)

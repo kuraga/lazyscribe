@@ -183,9 +183,12 @@ class Repository:
             The artifact object.
         """
         # Search for the artifact
-        artifact = self._search_artifact_versions(
-            name=name, version=version, match=match
-        )
+        try:
+            artifact = self._search_artifact_versions(
+                name=name, version=version, match=match
+            )
+        except ValueError as err:
+            raise ArtifactLoadError("No valid artifact found") from err
         # Construct the handler with relevant parameters.
         artifact_attrs = {
             x: y
@@ -372,6 +375,10 @@ class Repository:
                     "Please provide ``exact`` or ``asof`` as the value for ``match``"
                 ) from None
         else:
+            if match != "exact":
+                raise ValueError(
+                    "Please provide ``exact`` as the value for ``match`` as of ``version`` is an integer"
+                ) from None
             try:
                 # Integer version is 0-indexed
                 artifact = artifacts_matching_name[version]

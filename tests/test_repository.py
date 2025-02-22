@@ -267,21 +267,21 @@ def test_save_repository_multiple_artifact(tmp_path):
 
     # Test getting nonexisting version raises error
 
-    with pytest.raises(ValueError):
+    with pytest.raises(ArtifactLoadError):
         repository_read.load_artifact("my-dict", version=2)
-    with pytest.raises(ValueError):
+    with pytest.raises(ArtifactLoadError):
         repository_read.load_artifact("my-dict", version="2025-01-22T12:23:32")
-    with pytest.raises(ValueError):
+    with pytest.raises(ArtifactLoadError):
         repository_read.load_artifact(
             "my-dict", version=datetime(2025, 1, 22, 13, 23, 30)
         )
-    with pytest.raises(ValueError):
+    with pytest.raises(ArtifactLoadError):
         repository_read.load_artifact(
             "my-dict2", version=datetime(2025, 1, 22, 13, 23, 30)
         )
-    with pytest.raises(ValueError):
+    with pytest.raises(ArtifactLoadError):
         repository_read.load_artifact("my-dict2", version=1)
-    with pytest.raises(ValueError):
+    with pytest.raises(ArtifactLoadError):
         repository_read.load_artifact("my-dict2", version="2025-01-22T12:23:32")
 
     assert "my-dict" in repository_read
@@ -289,7 +289,7 @@ def test_save_repository_multiple_artifact(tmp_path):
     assert "my-dict3" not in repository_read
 
     # Non-existing artifact raises error
-    with pytest.raises(ValueError):
+    with pytest.raises(ArtifactLoadError):
         repository_read.load_artifact("my-dict3")
 
 
@@ -394,6 +394,12 @@ def test_invalid_match_strategy():
         repository._search_artifact_versions(
             "my-dict", version=datetime(2025, 1, 1), match="fake"
         )
+
+    with pytest.raises(ValueError):
+        repository._search_artifact_versions("my-dict", version=1, match="fake")
+
+    with pytest.raises(ValueError):
+        repository._search_artifact_versions("my-dict", version=1, match="asof")
 
 
 def test_repository_asof_search(tmp_path):

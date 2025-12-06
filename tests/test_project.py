@@ -28,10 +28,15 @@ DATA_DIR = CURR_DIR / "data"
 @pytest.mark.parametrize(
     "project_kwargs",
     [
-        {"author": "root"},
         {
-            "author": "root",
+            "fpath": "project.json",
+            "mode": "w",
+            "author": "root"
+        },
+        {
             "fpath": "file://" + (DATA_DIR / "external_fs_project.json").as_posix(),
+            "mode": "w",
+            "author": "root"
         },
     ],
 )
@@ -77,10 +82,15 @@ def test_logging_experiment(project_kwargs):
 @pytest.mark.parametrize(
     "project_kwargs",
     [
-        {"author": "root"},
         {
-            "author": "root",
+            "fpath": "project.json",
+            "mode": "w",
+            "author": "root"
+        },
+        {
             "fpath": "file://" + (DATA_DIR / "external_fs_project.json").as_posix(),
+            "mode": "w",
+            "author": "root"
         },
     ],
 )
@@ -129,12 +139,12 @@ def test_logging(caplog, project_kwargs):
 def test_invalid_project_mode():
     """Test instantiating a project with an invalid mode."""
     with pytest.raises(ValueError):
-        _ = Project(author="root", mode="fake-mode")
+        _ = Project("project.json", mode="fake-mode", author="root")
 
 
 def test_not_logging_experiment():
     """Test not logging an experiment when raising an error."""
-    project = Project(author="root")
+    project = Project("project.json", mode="w", author="root")
     with pytest.raises(ValueError), project.log(name="My experiment") as exp:
         raise ValueError("An error.")
         exp.log_metric("name", 0.5)
@@ -144,7 +154,7 @@ def test_not_logging_experiment():
 
 def test_not_logging_experiment_readonly():
     """Test trying to log an experiment in read only mode."""
-    project = Project(fpath=DATA_DIR / "project.json", mode="r")
+    project = Project(DATA_DIR / "project.json", mode="r")
     context_manager = project.log(name="New experiment")
     with pytest.raises(ReadOnlyError):
         _ = context_manager.__enter__()
@@ -163,7 +173,7 @@ def test_save_project(tmp_path):
     location = tmp_path / "my-project"
     project_location = location / "project.json"
     today = datetime.now()
-    project = Project(fpath=project_location, author="root")
+    project = Project(project_location, mode="w", author="root")
     with project.log(name="My experiment") as exp:
         exp.log_metric("name", 0.5)
         with exp.log_test("My test") as test:
@@ -209,7 +219,7 @@ def test_save_project_metric_transaction(tmp_path):
     location = tmp_path / "my-project"
     project_location = location / "project.json"
 
-    project = Project(fpath=project_location, author="root")
+    project = Project(project_location, mode="w", author="root")
     with project.log(name="My experiment") as exp:
         exp.log_parameter("data-type", int)
 
@@ -224,7 +234,7 @@ def test_save_project_transaction(tmp_path):
     location = tmp_path / "my-project"
     project_location = location / "project.json"
 
-    project = Project(fpath=project_location, author="root")
+    project = Project(project_location, mode="w", author="root")
     with project.log(name="My experiment") as exp:
         exp.log_artifact(name="should-not-work", value=int, handler="json")
 
@@ -242,24 +252,28 @@ def test_update_project_transaction(tmp_path):
     location = tmp_path / "my-project"
     project_location = location / "project.json"
 
-    project = Project(fpath=project_location, author="root")
+    project = Project(project_location, mode="w", author="root")
     with project.log(name="My experiment") as exp:
         exp.log_metric("metric", 0.5)
 
     project.save()
 
-    # Re-open the project and fail to log
-    project_w = Project(fpath=project_location, mode="w+")
+    # Re-open the project, compare it to the first version
+    project_w = Project(project_location, mode="w+")
+
+    assert project.experiments == project_w.experiments
+
+    # Fail to log
     with project_w.log(name="My second experiment") as exp:
         exp.log_artifact(name="should-not-work", value=int, handler="json")
 
     with pytest.raises(SaveError):
         project_w.save()
 
-    # Read in the project, compare it to the first version
-    project_r = Project(fpath=project_location, mode="w+")
+    # Re-open the project, compare it to the first version
+    project_w2 = Project(project_location, mode="w+")
 
-    assert project.experiments == project_r.experiments
+    assert project.experiments == project_w2.experiments
 
 
 @time_machine.travel(
@@ -271,7 +285,7 @@ def test_save_project_artifact(tmp_path):
     project_location = location / "project.json"
     today = datetime.now()
 
-    project = Project(fpath=project_location, author="root")
+    project = Project(project_location, mode="w", author="root")
     with project.log(name="My experiment") as exp:
         exp.log_artifact(name="features", value=[0, 1, 2], handler="json")
 
@@ -301,7 +315,7 @@ def test_save_project_artifact_str_path(tmp_path):
     project_location = str(location / "project.json")
     today = datetime.now()
 
-    project = Project(fpath=project_location, author="root")
+    project = Project(project_location, mode="w", author="root")
     with project.log(name="My experiment") as exp:
         exp.log_artifact(name="features", value=[0, 1, 2], handler="json")
 
@@ -333,7 +347,7 @@ def test_save_project_artifact_failed_validation(tmp_path):
     datasets = pytest.importorskip("sklearn.datasets")
     svm = pytest.importorskip("sklearn.svm")
 
-    project = Project(fpath=project_location, author="root")
+    project = Project(project_location, mode="w", author="root")
     with project.log(name="My experiment") as exp:
         # Fit a basic estimator
         X, y = datasets.make_classification(n_samples=100, n_features=10)
@@ -391,13 +405,13 @@ def test_save_project_artifact_multi_experiment(tmp_path):
     location = tmp_path / "my-project"
     project_location = location / "project.json"
 
-    project = Project(fpath=project_location, author="root")
+    project = Project(project_location, mode="w", author="root")
     with project.log(name="My first experiment") as exp:
         exp.log_artifact(name="features", value=[0, 1, 2], handler="json")
     project.save()
 
     # Reload the project in append-mode and log another experiment
-    reload_project = Project(fpath=project_location, mode="a", author="root")
+    reload_project = Project(project_location, mode="a", author="root")
 
     assert reload_project["my-first-experiment"].dirty is False
 
@@ -418,7 +432,7 @@ def test_save_project_artifact_multi_experiment(tmp_path):
     assert not first_art_path.is_file()
 
     # Reload the project in editable mode and add another experiment
-    final_project = Project(fpath=project_location, mode="w+", author="root")
+    final_project = Project(project_location, mode="w+", author="root")
 
     assert final_project["my-first-experiment"].dirty is False
     assert final_project["my-second-experiment"].dirty is False
@@ -465,14 +479,14 @@ def test_save_project_artifact_updated(tmp_path):
     location = tmp_path / "my-project"
     project_location = location / "project.json"
 
-    project = Project(fpath=project_location, author="root")
+    project = Project(project_location, mode="w", author="root")
     with project.log(name="My experiment") as exp:
         exp.log_artifact(name="features", value=[0, 1, 2], handler="json")
 
     project.save()
 
     # Re-open the project in editable mode
-    new_project = Project(fpath=project_location, mode="w+", author="root")
+    new_project = Project(project_location, mode="w+", author="root")
     new_project["my-experiment"].log_artifact(
         name="feature_names", value=["a", "b", "c"], handler="json"
     )
@@ -492,7 +506,7 @@ def test_save_project_artifact_updated(tmp_path):
 
 def test_load_project():
     """Test loading a project back into python."""
-    project = Project(fpath=DATA_DIR / "project.json", mode="w+")
+    project = Project(DATA_DIR / "project.json", mode="w+")
 
     expected = Experiment(
         name="My experiment",
@@ -517,14 +531,14 @@ def test_load_project_edit(tmp_path):
     """Test loading a project and editing an experiment."""
     location = tmp_path / "my-location"
     project_location = location / "project.json"
-    project = Project(fpath=project_location, author="root")
+    project = Project(project_location, mode="w", author="root")
     with project.log(name="My experiment") as exp:
         exp.log_metric("name", 0.5)
 
     project.save()
 
     # Load the project back
-    project = Project(fpath=project_location, mode="w+", author="friend")
+    project = Project(project_location, mode="w+", author="friend")
     exp = project["my-experiment"]
 
     assert exp.dirty is False
@@ -542,7 +556,7 @@ def test_load_project_edit(tmp_path):
 
 def test_load_project_readonly():
     """Test loading a project in read-only or append mode."""
-    project = Project(fpath=DATA_DIR / "project.json", mode="r")
+    project = Project(DATA_DIR / "project.json", mode="r")
 
     expected = ReadOnlyExperiment(
         name="My experiment",
@@ -567,7 +581,7 @@ def test_load_project_readonly():
 
 def test_load_project_dependencies():
     """Test loading a project where an experiment has dependencies."""
-    project = Project(fpath=DATA_DIR / "down-project.json", mode="a")
+    project = Project(DATA_DIR / "down-project.json", mode="a")
 
     expected = ReadOnlyExperiment(
         name="My downstream experiment",
@@ -592,8 +606,8 @@ def test_load_project_dependencies():
 
 def test_merge_append():
     """Test merging a project with one that has an extra experiment."""
-    current = Project(fpath=DATA_DIR / "project.json", mode="r")
-    newer = Project(fpath=DATA_DIR / "merge_append.json", mode="r")
+    current = Project(DATA_DIR / "project.json", mode="r")
+    newer = Project(DATA_DIR / "merge_append.json", mode="r")
 
     new = current.merge(newer)
 
@@ -626,8 +640,8 @@ def test_merge_append():
 
 def test_merge_distinct():
     """Test merging two projects with the no overlapping data."""
-    current = Project(fpath=DATA_DIR / "project.json", mode="r")
-    newer = Project(fpath=DATA_DIR / "merge_distinct.json", mode="r")
+    current = Project(DATA_DIR / "project.json", mode="r")
+    newer = Project(DATA_DIR / "merge_distinct.json", mode="r")
 
     new = current.merge(newer)
 
@@ -660,8 +674,8 @@ def test_merge_distinct():
 
 def test_merge_update():
     """Test merging projects with an updated experiment."""
-    current = Project(fpath=DATA_DIR / "project.json", mode="r")
-    newer = Project(fpath=DATA_DIR / "merge_update.json", mode="r")
+    current = Project(DATA_DIR / "project.json", mode="r")
+    newer = Project(DATA_DIR / "merge_update.json", mode="r")
 
     new = current.merge(newer)
 
@@ -696,7 +710,7 @@ def test_merge_update():
 
 def test_filter_project():
     """Test iterating through experiments based on a filter."""
-    project = Project(fpath=DATA_DIR / "merge_update.json", mode="r")
+    project = Project(DATA_DIR / "merge_update.json", mode="r")
     out = list(project.filter(func=lambda x: x.last_updated_by == "friend"))
 
     expected = [
@@ -731,7 +745,7 @@ def test_save_project_artifact_output_only(tmp_path):
     project_location = location / "project.testartifact"
     today = datetime.now()
 
-    project = Project(fpath=project_location, author="root")
+    project = Project(project_location, mode="w", author="root")
     with (
         project.log(name="My experiment") as exp,
         warnings.catch_warnings(record=True) as w,

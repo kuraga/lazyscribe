@@ -185,7 +185,7 @@ def test_save_project(tmp_path):
     assert project_location.is_file()
     assert project["my-experiment"].dirty is False
 
-    with open(project_location) as infile:
+    with open(project_location, "rt") as infile:
         serialized = json.load(infile)
 
     assert serialized == [
@@ -300,7 +300,7 @@ def test_save_project_artifact(tmp_path):
         location / f"my-experiment-{today.strftime('%Y%m%d%H%M%S')}" / features_fname
     ).is_file()
 
-    with open(location / exp.path / features_fname) as infile:
+    with open(location / exp.path / features_fname, "rt") as infile:
         artifact = json.load(infile)
 
     assert artifact == [0, 1, 2]
@@ -330,7 +330,7 @@ def test_save_project_artifact_str_path(tmp_path):
         location / f"my-experiment-{today.strftime('%Y%m%d%H%M%S')}" / features_fname
     ).is_file()
 
-    with open(location / exp.path / features_fname) as infile:
+    with open(location / exp.path / features_fname, "rt") as infile:
         artifact = json.load(infile)
 
     assert artifact == [0, 1, 2]
@@ -396,7 +396,7 @@ def test_save_project_artifact_multi_experiment(tmp_path):
         from lazyscribe.artifacts.json import JSONArtifact
 
         art = JSONArtifact.construct(name="mydict")
-        with open("test.json", "w") as buf:
+        with open("test.json", "wt") as buf:
             art.write(None, buf)
 
     So, if the file re-appears, it means that :py:meth:`lazyscribe.artifacts.json.JSONArtifact.write` was
@@ -470,7 +470,7 @@ def test_save_project_artifact_updated(tmp_path):
         from lazyscribe.artifacts.json import JSONArtifact
 
         art = JSONArtifact.construct(name="mydict")
-        with open("test.json", "w") as buf:
+        with open("test.json", "wt") as buf:
             art.write(None, buf)
 
     So, if the file re-appears, it means that :py:meth:`lazyscribe.artifacts.json.JSONArtifact.write` was

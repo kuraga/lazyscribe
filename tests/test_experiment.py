@@ -1,6 +1,5 @@
 """Test the experiment dataclass."""
 
-import warnings
 import zoneinfo
 from datetime import datetime
 from pathlib import Path
@@ -9,8 +8,6 @@ import pytest
 import time_machine
 from attrs.exceptions import FrozenInstanceError
 
-from lazyscribe.artifacts import _get_handler
-from lazyscribe.exception import ArtifactLoadError, ArtifactLogError
 from lazyscribe.experiment import Experiment, ReadOnlyExperiment
 from lazyscribe.test import ReadOnlyTest, Test
 
@@ -96,7 +93,6 @@ def test_experiment_serialization():
         "dependencies": [],
         "short_slug": "my-experiment",
         "slug": f"my-experiment-{today.strftime('%Y%m%d%H%M%S')}",
-        "artifacts": [],
         "tests": [
             {
                 "name": "My test",
@@ -107,125 +103,6 @@ def test_experiment_serialization():
         ],
         "tags": [],
     }
-
-
-@time_machine.travel(
-    datetime(2025, 1, 20, 13, 23, 30, tzinfo=zoneinfo.ZoneInfo("UTC")), tick=False
-)
-def test_experiment_artifact_logging_basic():
-    """Test logging an artifact to the experiment."""
-    today = datetime.now()
-
-    exp = Experiment(name="My experiment", project=Path("project.json"), author="root")
-    exp.log_artifact(name="features", value=[0, 1, 2], handler="json")
-    JSONArtifact = _get_handler("json")
-
-    assert isinstance(exp.artifacts[0], JSONArtifact)
-    assert exp.to_dict() == {
-        "name": "My experiment",
-        "author": "root",
-        "last_updated_by": "root",
-        "metrics": {},
-        "parameters": {},
-        "created_at": today.strftime("%Y-%m-%dT%H:%M:%S"),
-        "last_updated": today.strftime("%Y-%m-%dT%H:%M:%S"),
-        "dependencies": [],
-        "short_slug": "my-experiment",
-        "slug": f"my-experiment-{today.strftime('%Y%m%d%H%M%S')}",
-        "artifacts": [
-            {
-                "name": "features",
-                "fname": f"features-{today.strftime('%Y%m%d%H%M%S')}.json",
-                "handler": "json",
-                "created_at": today.strftime("%Y-%m-%dT%H:%M:%S"),
-                "version": 0,
-            }
-        ],
-        "tests": [],
-        "tags": [],
-    }
-    assert exp.dirty is True
-
-
-def test_experiment_artifact_logging_overwrite():
-    """Test overwriting an artifact."""
-    exp = Experiment(name="My experiment", project=Path("project.json"), author="root")
-    exp.log_artifact(name="features", value=[0, 1, 2], handler="json")
-    JSONArtifact = _get_handler("json")
-    assert isinstance(exp.artifacts[0], JSONArtifact)
-
-    with pytest.raises(ArtifactLogError):
-        exp.log_artifact(name="features", value=[3, 4, 5], handler="json")
-
-    assert exp.artifacts[0].value == [0, 1, 2]
-
-    exp.log_artifact(name="features", value=[3, 4, 5], handler="json", overwrite=True)
-
-    assert exp.artifacts[0].value == [3, 4, 5]
-
-
-@time_machine.travel(
-    datetime(2025, 1, 20, 13, 23, 30, tzinfo=zoneinfo.ZoneInfo("UTC")), tick=False
-)
-def test_experiment_artifact_load(tmp_path):
-    """Test loading an experiment artifact from the disk."""
-    location = tmp_path / "my-location"
-    location.mkdir()
-
-    today = datetime.now()
-    exp = Experiment(
-        name="My experiment", project=location / "project.json", author="root"
-    )
-    exp.log_artifact(name="features", value=[0, 1, 2], handler="json")
-    # Need to write the artifact to disk
-    fpath = exp.path / exp.artifacts[0].fname
-    exp.fs.makedirs(exp.path, exist_ok=True)
-    with exp.fs.open(fpath, "wt") as buf:
-        exp.artifacts[0].write(exp.artifacts[0].value, buf)
-
-    assert (
-        location
-        / "my-location"
-        / exp.path
-        / f"features-{today.strftime('%Y%m%d%H%M%S')}.json"
-    ).is_file()
-
-    out = exp.load_artifact(name="features")
-
-    assert out == [0, 1, 2]
-
-
-def test_experiment_artifact_load_keyerror(tmp_path):
-    """Test trying to load an artifact that doesn't exist."""
-    location = tmp_path / "my-location"
-    location.mkdir()
-
-    exp = Experiment(
-        name="My experiment", project=location / "project.json", author="root"
-    )
-
-    with pytest.raises(ArtifactLoadError):
-        exp.load_artifact(name="features")
-
-
-def test_experiment_artifact_load_validation():
-    """Test the handler validation."""
-    datasets = pytest.importorskip("sklearn.datasets")
-    svm = pytest.importorskip("sklearn.svm")
-
-    # Fit a basic estimator
-    X, y = datasets.make_classification(n_samples=100, n_features=10)
-    estimator = svm.SVC(kernel="linear")
-    estimator.fit(X, y)
-
-    exp = Experiment(name="My experiment", project=Path("project.json"), author="root")
-    exp.log_artifact(name="estimator", value=estimator, handler="pickle")
-
-    # Edit the experiment parameters to make sure the validation fails
-    exp.artifacts[0].python_version = "2.7"
-
-    with pytest.raises(ArtifactLoadError):
-        exp.load_artifact(name="estimator")
 
 
 @time_machine.travel(
@@ -257,7 +134,6 @@ def test_experiment_serialization_dependencies():
         ],
         "short_slug": "my-downstream-experiment",
         "slug": f"my-downstream-experiment-{today.strftime('%Y%m%d%H%M%S')}",
-        "artifacts": [],
         "tests": [],
         "tags": [],
     }
@@ -302,48 +178,3 @@ def test_frozen_test():
         test.name = "actually the test is not that"
 
     assert "lazyscribe.test.ReadOnlyTest" in str(test)
-
-
-@time_machine.travel(
-    datetime(2025, 1, 20, 13, 23, 30, tzinfo=zoneinfo.ZoneInfo("UTC")), tick=False
-)
-def test_experiment_artifact_log_load_output_only(tmp_path):
-    """Test loading an experiment artifact from the disk."""
-    location = tmp_path / "my-location"
-    location.mkdir()
-
-    exp = Experiment(
-        name="My experiment", project=location / "project.json", author="root"
-    )
-    with warnings.catch_warnings(record=True) as w:
-        warnings.simplefilter("always")
-        exp.log_artifact(name="features", value=[0, 1, 2], handler="testartifact")
-        assert len(w) == 1
-        assert issubclass(w[-1].category, UserWarning)
-        assert (
-            "Artifact 'features' is added. It is not meant to be read back as Python Object"
-            in str(w[-1].message)
-        )
-
-    # Need to write the artifact to disk
-    fpath = exp.path / exp.artifacts[0].fname
-    exp.fs.makedirs(exp.path, exist_ok=True)
-    with exp.fs.open(fpath, "wt") as buf:
-        exp.artifacts[0].write(exp.artifacts[0].value, buf)
-    today = datetime.now()
-    assert (
-        location
-        / "my-location"
-        / exp.path
-        / f"features-{today.strftime('%Y%m%d%H%M%S')}.testartifact"
-    ).is_file()
-
-    with warnings.catch_warnings(record=True) as w:
-        warnings.simplefilter("always")
-        exp.load_artifact(name="features")
-
-        assert len(w) == 1
-        assert issubclass(w[-1].category, UserWarning)
-        assert "Artifact 'features' is not the original Python Object" in str(
-            w[-1].message
-        )

@@ -5,7 +5,6 @@ from __future__ import annotations
 import getpass
 import json
 import logging
-import warnings
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from datetime import datetime
@@ -15,8 +14,6 @@ from urllib.parse import urlparse
 
 import fsspec
 
-from lazyscribe.artifacts import _get_handler
-from lazyscribe.artifacts.base import Artifact
 from lazyscribe.exception import ReadOnlyError, SaveError
 from lazyscribe.experiment import Experiment, ReadOnlyExperiment
 from lazyscribe.linked import LinkedList, merge
@@ -138,18 +135,6 @@ class Project:
                     else:
                         tests.append(Test(**test))
 
-            artifacts: list[Artifact] = []
-            if "artifacts" in exp:
-                artifactlist = exp.pop("artifacts")
-                for artifact in artifactlist:
-                    handler_cls = _get_handler(artifact.pop("handler"))
-                    created_at = datetime.fromisoformat(artifact.pop("created_at"))
-                    artifacts.append(
-                        handler_cls.construct(
-                            **artifact, created_at=created_at, dirty=False
-                        )
-                    )
-
             if self.mode in ("r", "a"):
                 self.experiments.append(
                     ReadOnlyExperiment(
@@ -158,7 +143,6 @@ class Project:
                         fs=self.fs,
                         dependencies=dependencies,
                         tests=tests,
-                        artifacts=artifacts,
                         dirty=False,
                     )
                 )
@@ -170,15 +154,12 @@ class Project:
                         fs=self.fs,
                         dependencies=dependencies,
                         tests=tests,
-                        artifacts=artifacts,
                         dirty=False,
                     )
                 )
 
     def save(self) -> None:
         """Save the project data.
-
-        This includes saving any artifact data.
 
         Raises
         ------
@@ -214,35 +195,6 @@ class Project:
                 if not exp.dirty:
                     LOG.debug(f"{exp.slug} has not been updated. Skipping...")
                     continue
-                # Write the artifact data
-                LOG.info(f"Saving artifacts for {exp.slug}")
-                for artifact in exp.artifacts:
-                    fmode = "wb" if artifact.binary else "wt"
-                    fpath = exp.path / artifact.fname
-                    if not artifact.dirty:
-                        LOG.debug(f"Artifact '{artifact.name}' has not been updated")
-                        continue
-
-                    try:
-                        self.fs.makedirs(str(exp.path), exist_ok=True)
-                        LOG.debug(f"Saving '{artifact.name}' to {fpath!s}...")
-                        with self.fs.open(str(fpath), fmode) as buf:
-                            artifact.write(
-                                artifact.value, buf, **artifact.writer_kwargs
-                            )
-                    except Exception as exc:
-                        raise SaveError(
-                            f"Unable to write '{artifact.name}' to '{fpath!s}'"
-                        ) from exc
-
-                    # Reset the `dirty` flag since we have the updated artifact on disk
-                    artifact.dirty = False
-                    if artifact.output_only:
-                        warnings.warn(
-                            f"Artifact '{artifact.name}' is added. It is not meant to be read back as Python Object",
-                            UserWarning,
-                            stacklevel=2,
-                        )
 
                 exp.dirty = False
 

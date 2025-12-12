@@ -30,7 +30,6 @@ dependencies = [
     "attrs>=21.2.0,<=25.4.0",
     "fsspec>=0.4.0,<=2025.12.0",
     "python-slugify>=5.0.0,<=8.0.4",
-    "tomli>=2.2.1,<=2.3.0; python_version<='3.10'",
 ]
 
 optional-dependencies.build = [ "commitizen", "uv" ]
@@ -69,10 +68,6 @@ optional-dependencies.tests = [
 ]
 urls.documentation = "https://lazyscribe.github.io/lazyscribe/"
 urls.repository = "https://github.com/lazyscribe/lazyscribe"
-
-entry-points."lazyscribe.artifact_type".base = "lazyscribe.artifacts.base:Artifact"
-entry-points."lazyscribe.artifact_type".json = "lazyscribe.artifacts.json:JSONArtifact"
-entry-points."lazyscribe.artifact_type".pickle = "lazyscribe.artifacts.pickle:PickleArtifact"
 
 [tool.uv.build-backend]
 module-name = "lazyscribe"

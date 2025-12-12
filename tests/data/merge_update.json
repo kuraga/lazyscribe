@@ -10,7 +10,6 @@
         "dependencies": [],
         "short_slug": "my-experiment",
         "slug": "my-experiment-20220101093000",
-        "artifacts": [],
         "tests": [
             {
                 "name": "My test",
@@ -35,7 +34,6 @@
         "dependencies": [],
         "short_slug": "my-second-experiment",
         "slug": "my-second-experiment-20220101103000",
-        "artifacts": [],
         "tests": [],
         "tags": []
     }

@@ -36,9 +36,6 @@ Contents
     how-to/tag
     how-to/filter
     how-to/tests
-    how-to/custom-artifact
-    how-to/version-artifacts
-    how-to/filter-artifacts
     how-to/dependencies
     how-to/external-fs
     how-to/readonly

@@ -2,21 +2,17 @@
 
 import json
 import logging
-import warnings
 import zoneinfo
 from datetime import datetime, timedelta
 from pathlib import Path
-from unittest.mock import patch
 
-import fsspec
 import pytest
 import time_machine
 
 from lazyscribe import Project
-from lazyscribe.exception import ArtifactLoadError, ReadOnlyError, SaveError
+from lazyscribe.exception import ReadOnlyError, SaveError
 from lazyscribe.experiment import Experiment, ReadOnlyExperiment
 from lazyscribe.test import ReadOnlyTest, Test
-from tests.conftest import TestArtifact
 
 CURR_DIR = Path(__file__).resolve().parent
 DATA_DIR = CURR_DIR / "data"
@@ -62,7 +58,6 @@ def test_logging_experiment(project_kwargs):
         "dependencies": [],
         "short_slug": "my-experiment",
         "slug": f"my-experiment-{today.strftime('%Y%m%d%H%M%S')}",
-        "artifacts": [],
         "tests": [],
         "tags": [],
     }
@@ -200,7 +195,6 @@ def test_save_project(tmp_path):
             "dependencies": [],
             "short_slug": "my-experiment",
             "slug": f"my-experiment-{today.strftime('%Y%m%d%H%M%S')}",
-            "artifacts": [],
             "tests": [
                 {
                     "name": "My test",
@@ -229,21 +223,6 @@ def test_save_project_metric_transaction(tmp_path):
     assert not project_location.is_file()
 
 
-def test_save_project_transaction(tmp_path):
-    """Test not saving a project due to errors in writing an artifact."""
-    location = tmp_path / "my-project"
-    project_location = location / "project.json"
-
-    project = Project(project_location, mode="w", author="root")
-    with project.log(name="My experiment") as exp:
-        exp.log_artifact(name="should-not-work", value=int, handler="json")
-
-    with pytest.raises(SaveError):
-        project.save()
-
-    assert not project_location.is_file()
-
-
 @time_machine.travel(
     datetime(2025, 1, 20, 13, 23, 30, tzinfo=zoneinfo.ZoneInfo("UTC")), tick=False
 )
@@ -265,7 +244,8 @@ def test_update_project_transaction(tmp_path):
 
     # Fail to log
     with project_w.log(name="My second experiment") as exp:
-        exp.log_artifact(name="should-not-work", value=int, handler="json")
+        with project_w.log(name="My experiment") as exp:
+            exp.log_metric("should-not-work", int)
 
     with pytest.raises(SaveError):
         project_w.save()
@@ -274,234 +254,6 @@ def test_update_project_transaction(tmp_path):
     project_w2 = Project(project_location, mode="w+")
 
     assert project.experiments == project_w2.experiments
-
-
-@time_machine.travel(
-    datetime(2025, 1, 20, 13, 23, 30, tzinfo=zoneinfo.ZoneInfo("UTC")), tick=False
-)
-def test_save_project_artifact(tmp_path):
-    """Test saving a project with an artifact."""
-    location = tmp_path / "my-project"
-    project_location = location / "project.json"
-    today = datetime.now()
-
-    project = Project(project_location, mode="w", author="root")
-    with project.log(name="My experiment") as exp:
-        exp.log_artifact(name="features", value=[0, 1, 2], handler="json")
-
-    project.save()
-
-    assert project["my-experiment"].dirty is False
-    assert project["my-experiment"].artifacts[0].dirty is False
-    assert project_location.is_file()
-
-    features_fname = f"features-{today.strftime('%Y%m%d%H%M%S')}.json"
-    assert (
-        location / f"my-experiment-{today.strftime('%Y%m%d%H%M%S')}" / features_fname
-    ).is_file()
-
-    with open(location / exp.path / features_fname, "rt") as infile:
-        artifact = json.load(infile)
-
-    assert artifact == [0, 1, 2]
-
-
-@time_machine.travel(
-    datetime(2025, 1, 20, 13, 23, 30, tzinfo=zoneinfo.ZoneInfo("UTC")), tick=False
-)
-def test_save_project_artifact_str_path(tmp_path):
-    """Test saving a project with an artifact."""
-    location = tmp_path / "my-project"
-    project_location = str(location / "project.json")
-    today = datetime.now()
-
-    project = Project(project_location, mode="w", author="root")
-    with project.log(name="My experiment") as exp:
-        exp.log_artifact(name="features", value=[0, 1, 2], handler="json")
-
-    project.save()
-
-    assert project["my-experiment"].dirty is False
-    assert project["my-experiment"].artifacts[0].dirty is False
-    assert Path(project_location).is_file()
-
-    features_fname = f"features-{today.strftime('%Y%m%d%H%M%S')}.json"
-    assert (
-        location / f"my-experiment-{today.strftime('%Y%m%d%H%M%S')}" / features_fname
-    ).is_file()
-
-    with open(location / exp.path / features_fname, "rt") as infile:
-        artifact = json.load(infile)
-
-    assert artifact == [0, 1, 2]
-
-
-@time_machine.travel(
-    datetime(2025, 1, 20, 13, 23, 30, tzinfo=zoneinfo.ZoneInfo("UTC")), tick=False
-)
-def test_save_project_artifact_failed_validation(tmp_path):
-    """Test saving and loading project with an artifact."""
-    location = tmp_path / "my-project"
-    project_location = location / "project.json"
-
-    datasets = pytest.importorskip("sklearn.datasets")
-    svm = pytest.importorskip("sklearn.svm")
-
-    project = Project(project_location, mode="w", author="root")
-    with project.log(name="My experiment") as exp:
-        # Fit a basic estimator
-        X, y = datasets.make_classification(n_samples=100, n_features=10)
-        estimator = svm.SVC(kernel="linear")
-        estimator.fit(X, y)
-        exp.log_artifact(name="estimator", value=estimator, handler="pickle")
-
-    assert project["my-experiment"].dirty is True
-
-    project.save()
-
-    assert project["my-experiment"].dirty is False
-    assert project["my-experiment"].artifacts[0].dirty is False
-    assert project_location.is_file()
-    assert (
-        location
-        / f"my-experiment-{exp.last_updated.strftime('%Y%m%d%H%M%S')}"
-        / f"estimator-{exp.last_updated.strftime('%Y%m%d%H%M%S')}.pkl"
-    ).is_file()
-
-    # Reload project and validate experiment
-    with (
-        pytest.raises(ArtifactLoadError),
-        patch("lazyscribe.artifacts.pickle.sys.version_info") as mock_version,
-    ):
-        mock_version.return_value = (3, 9)
-        project2 = Project(project_location, mode="r")
-        exp2 = project2["my-experiment"]
-        exp2.load_artifact(name="estimator")
-
-
-def test_save_project_artifact_multi_experiment(tmp_path):
-    """Test running save on a project twice with multiple experiments and artifacts.
-
-    The goal of this test is to ensure that an experiment opened in read-only mode or
-    one that has not been updated does not result in the file being overwritten on the filesystem.
-
-    The logic of the test is that if we manually delete an artifact, it should not re-appear in the
-    filesystem.
-
-    This logic works with the JSON handler because you can write a JSON file with `None`
-    as the value:
-
-    .. code-block:: python
-
-        from lazyscribe.artifacts.json import JSONArtifact
-
-        art = JSONArtifact.construct(name="mydict")
-        with open("test.json", "wt") as buf:
-            art.write(None, buf)
-
-    So, if the file re-appears, it means that :py:meth:`lazyscribe.artifacts.json.JSONArtifact.write` was
-    called without us re-loading the object into memory and without overwriting the artifact in the experiment(s).
-    """
-    location = tmp_path / "my-project"
-    project_location = location / "project.json"
-
-    project = Project(project_location, mode="w", author="root")
-    with project.log(name="My first experiment") as exp:
-        exp.log_artifact(name="features", value=[0, 1, 2], handler="json")
-    project.save()
-
-    # Reload the project in append-mode and log another experiment
-    reload_project = Project(project_location, mode="a", author="root")
-
-    assert reload_project["my-first-experiment"].dirty is False
-
-    with reload_project.log(name="My second experiment") as exp:
-        exp.log_artifact(name="features", value=[3, 4, 5], handler="json")
-
-    # Manually delete the artifact file
-    fs = fsspec.filesystem("file")
-    first_art_path = (
-        project["my-first-experiment"].path
-        / project["my-first-experiment"].artifacts[0].fname
-    )
-    fs.rm(str(first_art_path))
-
-    reload_project.save()
-
-    # Check that the first experiment artifact was not overwritten -- it should not exist
-    assert not first_art_path.is_file()
-
-    # Reload the project in editable mode and add another experiment
-    final_project = Project(project_location, mode="w+", author="root")
-
-    assert final_project["my-first-experiment"].dirty is False
-    assert final_project["my-second-experiment"].dirty is False
-
-    with final_project.log(name="My third experiment") as exp:
-        exp.log_artifact(name="features", value=[6, 7, 8], handler="json")
-
-    # Manually delete the second artifact file
-    second_art_path = (
-        reload_project["my-second-experiment"].path
-        / reload_project["my-second-experiment"].artifacts[0].fname
-    )
-    fs.rm(second_art_path)
-
-    final_project.save()
-
-    # Check that the first and second experiment artifacts were not overwritten
-    assert not first_art_path.is_file()
-    assert not second_art_path.is_file()
-
-
-def test_save_project_artifact_updated(tmp_path):
-    """Test running save twice with an updated experiment.
-
-    The goal of this test is to ensure that an artifact is not overwritten unnecessarily.
-
-    The logic of the test is that if we manually delete an artifact, it should not re-appear in the
-    filesystem.
-
-    This logic works with the JSON handler because you can write a JSON file with `None`
-    as the value:
-
-    .. code-block:: python
-
-        from lazyscribe.artifacts.json import JSONArtifact
-
-        art = JSONArtifact.construct(name="mydict")
-        with open("test.json", "wt") as buf:
-            art.write(None, buf)
-
-    So, if the file re-appears, it means that :py:meth:`lazyscribe.artifacts.json.JSONArtifact.write` was
-    called without us re-loading the object into memory and without overwriting the artifact in the experiment(s).
-    """
-    location = tmp_path / "my-project"
-    project_location = location / "project.json"
-
-    project = Project(project_location, mode="w", author="root")
-    with project.log(name="My experiment") as exp:
-        exp.log_artifact(name="features", value=[0, 1, 2], handler="json")
-
-    project.save()
-
-    # Re-open the project in editable mode
-    new_project = Project(project_location, mode="w+", author="root")
-    new_project["my-experiment"].log_artifact(
-        name="feature_names", value=["a", "b", "c"], handler="json"
-    )
-
-    # Intentionally delete the artifact
-    fs = fsspec.filesystem("file")
-    art_path = (
-        project["my-experiment"].path / project["my-experiment"].artifacts[0].fname
-    )
-    fs.rm(str(art_path))
-
-    new_project.save()
-
-    # The artifact file should not exist because we manually deleted it and it wasn't overwritten
-    assert not art_path.is_file()
 
 
 def test_load_project():
@@ -734,69 +486,3 @@ def test_filter_project():
     ]
 
     assert out == expected
-
-
-@time_machine.travel(
-    datetime(2025, 1, 20, 13, 23, 30, tzinfo=zoneinfo.ZoneInfo("UTC")), tick=False
-)
-def test_save_project_artifact_output_only(tmp_path):
-    """Test saving a project with an output only artifact."""
-    location = tmp_path / "my-project"
-    project_location = location / "project.testartifact"
-    today = datetime.now()
-
-    project = Project(project_location, mode="w", author="root")
-    with (
-        project.log(name="My experiment") as exp,
-        warnings.catch_warnings(record=True) as w,
-    ):
-        warnings.simplefilter("always")
-        exp.log_artifact(name="features", value=[0, 1, 2], handler="testartifact")
-        assert len(w) == 1
-        assert issubclass(w[-1].category, UserWarning)
-        assert (
-            "Artifact 'features' is added. It is not meant to be read back as Python Object"
-            in str(w[-1].message)
-        )
-        assert isinstance(exp.artifacts[0], TestArtifact)
-        assert exp.to_dict() == {
-            "name": "My experiment",
-            "author": "root",
-            "last_updated_by": "root",
-            "metrics": {},
-            "parameters": {},
-            "created_at": today.strftime("%Y-%m-%dT%H:%M:%S"),
-            "last_updated": today.strftime("%Y-%m-%dT%H:%M:%S"),
-            "dependencies": [],
-            "short_slug": "my-experiment",
-            "slug": f"my-experiment-{today.strftime('%Y%m%d%H%M%S')}",
-            "artifacts": [
-                {
-                    "name": "features",
-                    "fname": f"features-{today.strftime('%Y%m%d%H%M%S')}.testartifact",
-                    "handler": "testartifact",
-                    "created_at": today.strftime("%Y-%m-%dT%H:%M:%S"),
-                    "version": 0,
-                }
-            ],
-            "tests": [],
-            "tags": [],
-        }
-
-    with warnings.catch_warnings(record=True) as w:
-        warnings.simplefilter("always")
-        project.save()
-
-        assert len(w) == 1
-        assert issubclass(w[-1].category, UserWarning)
-        assert (
-            "Artifact 'features' is added. It is not meant to be read back as Python Object"
-            in str(w[-1].message)
-        )
-
-    assert project_location.is_file()
-    assert (
-        location
-        / f"my-experiment-{today.strftime('%Y%m%d%H%M%S')}"
-        / f"features-{today.strftime('%Y%m%d%H%M%S')}.testartifact"
-    ).is_file()

@@ -4,11 +4,8 @@ from __future__ import annotations
 
 import getpass
 import logging
-import os
-import warnings
 from collections.abc import Iterator
 from contextlib import contextmanager
-from copy import copy
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -17,7 +14,6 @@ from attrs import (
     Factory,
     asdict,
     define,
-    evolve,
     field,
     fields,
     filters,
@@ -27,11 +23,7 @@ from fsspec.implementations.local import LocalFileSystem
 from fsspec.spec import AbstractFileSystem
 from slugify import slugify
 
-from lazyscribe._utils import serializer, utcnow, validate_artifact_environment
-from lazyscribe.artifacts import _get_handler
-from lazyscribe.artifacts.base import Artifact
-from lazyscribe.exception import ArtifactLoadError, ArtifactLogError, SaveError
-from lazyscribe.repository import Repository
+from lazyscribe._utils import serializer, utcnow
 from lazyscribe.test import Test
 
 LOG = logging.getLogger(__name__)
@@ -78,8 +70,6 @@ class Experiment:
         experiment and the value is an :py:class:`Experiment` instance.
     tests : list[lazyscribe.test.Test], optional (default [])
         List of :py:class:`lazyscribe.test.Test` objects corresponding to sub-population/non-global metrics.
-    artifacts : list[lazyscribe.artifacts.base.Artifact], optional (default [])
-        List of :py:class:`lazyscribe.artifact.base.Artifact` objects corresponding to experimental artifacts.
     dirty : bool, optional (default True)
         Whether or not this experiment should be saved when :py:meth:`lazyscribe.project.Project.save`
         is called. This decision is based on whether the experiment is new or has been updated.
@@ -99,7 +89,6 @@ class Experiment:
     short_slug: str = field()
     slug: str = field()
     tests: list[Test] = Factory(lambda: [])
-    artifacts: list[Artifact] = Factory(factory=lambda: [])
     tags: list[str] = Factory(factory=lambda: [])
     dirty: bool = field(eq=False, factory=lambda: True)
 
@@ -156,8 +145,7 @@ class Experiment:
     def path(self) -> Path:
         """Path to an experiment folder.
 
-        This folder can be used to store any plots or artifacts that you want to associate
-        with the experiment.
+        This folder can be used to store any artifacts that you want to associate with the experiment.
 
         Returns
         -------
@@ -225,124 +213,6 @@ class Experiment:
 
         self.dirty = True
 
-    def log_artifact(
-        self,
-        name: str,
-        value: Any,
-        handler: str,
-        fname: str | None = None,
-        overwrite: bool = False,
-        **kwargs: Any,
-    ) -> None:
-        """Log an artifact to the experiment.
-
-        This method associates an artifact with the experiment, but the artifact will
-        not be written until :py:meth:`lazyscribe.Project.save` is called.
-
-        Parameters
-        ----------
-        name : str
-            The name of the artifact.
-        value : Any
-            The object to persist to the filesystem.
-        handler : str
-            The name of the handler to use for the object.
-        fname : str, optional (default None)
-            The filename for the artifact. If not provided, it will be derived from the
-            name of the artifact and the builtin suffix for each handler.
-        overwrite : bool, optional (default False)
-            Whether or not to overwrite an existing artifact with the same name. If set to ``True``,
-            the previous artifact will be removed and overwritten with the current artifact.
-        **kwargs
-            Keyword arguments for the write function of the handler.
-
-        Raises
-        ------
-        lazyscribe.exception.ArtifactLogError
-            Raised if an artifact is supplied with the same name as an existing artifact and
-            ``overwrite`` is set to ``False``.
-        """
-        # Retrieve and construct the handler
-        self.last_updated = utcnow()
-        self.dirty = True
-        handler_cls = _get_handler(handler)
-        artifact_handler = handler_cls.construct(
-            name=name,
-            value=value,
-            fname=fname,
-            created_at=self.last_updated,
-            writer_kwargs=kwargs,
-        )
-        for index, artifact in enumerate(self.artifacts):
-            if artifact.name == name:
-                if overwrite:
-                    self.artifacts[index] = artifact_handler
-                    if handler_cls.output_only:
-                        warnings.warn(
-                            f"Artifact '{name}' is added. It is not meant to be read back as Python Object",
-                            UserWarning,
-                            stacklevel=2,
-                        )
-                    break
-                else:
-                    raise ArtifactLogError(
-                        f"An artifact with name {name} already exists in the experiment. Please "
-                        "use another name or set ``overwrite=True`` to replace the artifact."
-                    )
-        else:
-            self.artifacts.append(artifact_handler)
-            if handler_cls.output_only:
-                warnings.warn(
-                    f"Artifact '{name}' is added. It is not meant to be read back as Python Object",
-                    UserWarning,
-                    stacklevel=2,
-                )
-
-    def load_artifact(self, name: str, validate: bool = True, **kwargs: Any) -> Any:
-        """Load a single artifact.
-
-        Parameters
-        ----------
-        name : str
-            The name of the artifact to load.
-        validate : bool, optional (default True)
-            Whether or not to validate the runtime environment against the artifact
-            metadata.
-        **kwargs
-            Keyword arguments for the handler read function.
-
-        Returns
-        -------
-        Any
-            The artifact object.
-
-        Raises
-        ------
-        lazyscribe.exception.ArtifactLoadError
-            If ``validate`` and runtime environment does not match artifact metadata.
-            Or if there is no artifact found with the name provided.
-        """
-        for artifact in self.artifacts:
-            if artifact.name == name:
-                # Validate the handler
-                if validate:
-                    validate_artifact_environment(artifact)
-                # Read in the artifact
-                mode = "rb" if artifact.binary else "r"
-                with self.fs.open(str(self.path / artifact.fname), mode) as buf:
-                    out = artifact.read(buf, **kwargs)
-                if artifact.output_only:
-                    warnings.warn(
-                        f"Artifact '{name}' is not the original Python Object",
-                        UserWarning,
-                        stacklevel=2,
-                    )
-                break
-        else:
-            raise ArtifactLoadError(f"No artifact with name {name}")
-
-        return out
-
     @contextmanager
     def log_test(self, name: str, description: str | None = None) -> Iterator[Test]:
         """Add a test to the experiment using a context handler.
@@ -388,93 +258,6 @@ class Experiment:
                 fields(Experiment).dirty,
             ),
         )
-
-    def promote_artifact(self, repository: Repository, name: str) -> None:
-        """Associate an artifact with a :py:class:`lazyscribe.repository.Repository`.
-
-        The purpose of this method is to move an artifact from an *ephemeral*
-        experiment to the versioned repository.
-
-        If the artifact does not exist on disk yet, this function is simply a passthrough
-        to :py:meth:`lazyscribe.repository.Repository.log_artifact`. If the artifact does
-        exist on disk already, this function will copy the artifact from the experiment
-        directory to the repository, increment the version, and call
-        :py:meth:`lazyscribe.repository.Repository.save`.
-
-        Parameters
-        ----------
-        repository : lazyscribe.repository.Repository
-            The :py:class:`lazyscribe.repository.Repository` to promote the artifact to.
-        name : str
-            The artifact to promote.
-
-        Raises
-        ------
-        lazyscribe.exception.ArtifactLogError
-            Raised if the artifact to be promoted is not newer than the latest version available
-            in the repository.
-            Raised if
-
-            * the artifact ``name`` exists on the filesystem, and
-            * the filesystem protocol does not match between the repository and the experiment.
-        lazyscribe.exception.ArtifactLoadError
-            Raised if there is no artifact with the name ``name`` in the experiment.
-        lazyscribe.exception.SaveError
-            Raised when writing to the filesystem fails.
-        """
-        for artifact in self.artifacts:
-            if artifact.name == name:
-                try:
-                    meta_ = repository.get_artifact_metadata(name)
-                    if (
-                        datetime.strptime(meta_["created_at"], "%Y-%m-%dT%H:%M:%S")
-                        >= artifact.created_at
-                    ):
-                        raise ArtifactLogError(
-                            f"Artifact `{name}` is not newer than the latest version available in the repository."
-                        ) from None
-                    new_handler = evolve(artifact, version=meta_["version"] + 1)
-                except ValueError:
-                    new_handler = copy(artifact)
-
-                if artifact.dirty:
-                    LOG.debug(
-                        f"The current value for artifact '{name}' is not on the filesystem."
-                    )
-                    repository.artifacts.append(new_handler)
-                else:
-                    # The artifact is on disk, we will have to copy it over
-                    curr_path = self.path / artifact.fname
-                    if self.fs.protocol != repository.fs.protocol:
-                        raise ArtifactLogError(
-                            "The repository and the experiment use different filesystems. "
-                            f"Please move {curr_path!s} from the experiment filesystem to "
-                            "the Repository filesystem and log it manually."
-                        )
-                    new_path = repository.dir / artifact.name
-                    LOG.debug(f"Copying '{curr_path!s}' to '{new_path!s}{os.sep}'")
-                    if not self.fs.isdir(f"{new_path!s}{os.sep}"):
-                        LOG.debug(f"Creating '{new_path!s}{os.sep}'")
-                        self.fs.mkdir(f"{new_path!s}{os.sep}", create_parents=True)
-                    self.fs.copy(str(curr_path), f"{new_path!s}{os.sep}")
-
-                    repository.artifacts.append(new_handler)
-                    LOG.info(
-                        "Calling `save` on the repository since the artifact exists on disk already."
-                    )
-                    try:
-                        repository.save()
-                    except SaveError as exc:
-                        LOG.info(
-                            f"Save failed, deleting '{(new_path / artifact.fname)!s}'..."
-                        )
-                        self.fs.rm(str(new_path / artifact.fname))
-                        del repository.artifacts[-1]
-
-                        raise exc
-                break
-        else:
-            raise ArtifactLoadError(f"No artifact with name {name}")
 
     def __str__(self) -> str:
         """Shortened string representation."""

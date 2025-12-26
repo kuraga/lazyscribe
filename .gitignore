@@ -69,7 +69,6 @@ instance/
 # Sphinx documentation
 docs/_build/
 docs/api/*
-docs/tutorials/
 docs/sg_execution_times.rst
 
 # PyBuilder

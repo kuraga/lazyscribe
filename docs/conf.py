@@ -37,7 +37,6 @@ extensions = [
     "sphinx.ext.autodoc",
     "sphinx.ext.napoleon",
     "sphinx.ext.viewcode",
-    "sphinx_gallery.gen_gallery",
     "sphinx_inline_tabs",
 ]
 
@@ -77,7 +76,7 @@ language = "en"
 # List of patterns, relative to source directory, that match files and
 # directories to ignore when looking for source files.
 # This patterns also effect to html_static_path and html_extra_path
-exclude_patterns = ["_build", "Thumbs.db", ".DS_Store"]
+exclude_patterns = ["_build"]
 
 # If true, `todo` and `todoList` produce output, else they produce nothing.
 todo_include_todos = False
@@ -97,14 +96,6 @@ autodoc_default_options = {
 napoleon_google_docstring = False
 napoleon_numpy_docstring = True
 
-# Sphinx gallery configuration
-
-sphinx_gallery_conf = {
-    "examples_dirs": "../tutorials",
-    "filename_pattern": "",
-    "gallery_dirs": "tutorials",
-}
-
 
 # -- Options for HTML output -------------------------------------------
 
@@ -122,4 +113,4 @@ html_theme_options = {}
 # Add any paths that contain custom static files (such as style sheets) here,
 # relative to this directory. They are copied after the builtin static files,
 # so a file named "default.css" will overwrite the builtin "default.css".
-html_static_path = ["_static"]
+html_static_path = []

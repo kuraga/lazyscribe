@@ -46,8 +46,6 @@ optional-dependencies.docs = [
     "time-machine",
 ]
 optional-dependencies.qa = [
-    "edgetest",
-    "edgetest-pip-tools",
     "mypy",
     "pip-tools",
     "pre-commit",
@@ -130,8 +128,3 @@ version_files = [
     "lazyscribe/_meta.py:__version__",
     "docs/conf.py:version",
 ]
-
-[edgetest.envs.core]
-extras = [ "tests" ]
-upgrade = [ "attrs", "python-slugify", "fsspec" ]
-command = "pytest tests"

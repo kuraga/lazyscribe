@@ -92,7 +92,6 @@ numpy==2.3.5
     # via
     #   contourpy
     #   matplotlib
-    #   pandas
     #   scikit-learn
     #   scipy
 packaging==25.0
@@ -103,8 +102,6 @@ packaging==25.0
     #   matplotlib
     #   pytest
     #   sphinx
-pandas==2.3.3
-    # via lazyscribe (pyproject.toml)
 pathspec==0.12.1
     # via mypy
 pillow==12.0.0
@@ -152,13 +149,9 @@ pytest==9.0.2
 pytest-cov==7.0.0
     # via lazyscribe (pyproject.toml)
 python-dateutil==2.9.0.post0
-    # via
-    #   matplotlib
-    #   pandas
+    # via matplotlib
 python-slugify==8.0.4
     # via lazyscribe (pyproject.toml)
-pytz==2025.2
-    # via pandas
 pyyaml==6.0.3
     # via
     #   commitizen
@@ -232,8 +225,6 @@ typing-extensions==4.15.0
     # via
     #   beautifulsoup4
     #   mypy
-tzdata==2025.2
-    # via pandas
 urllib3==2.6.2
     # via requests
 uv==0.9.16

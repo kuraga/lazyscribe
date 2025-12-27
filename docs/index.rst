@@ -36,8 +36,6 @@ Contents
     how-to/tag
     how-to/filter
     how-to/tests
-    how-to/tabular
-    how-to/artifact
     how-to/custom-artifact
     how-to/version-artifacts
     how-to/filter-artifacts

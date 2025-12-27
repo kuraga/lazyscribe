@@ -43,7 +43,6 @@ optional-dependencies.dev = [
 optional-dependencies.docs = [
     "furo",
     "matplotlib",
-    "pandas",
     "pillow",
     "scikit-learn",
     "sphinx",
